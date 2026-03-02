@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "1002770348452",
+    "firebase_url": "https://sellmate-bdd22-default-rtdb.firebaseio.com",
+    "project_id": "sellmate-bdd22",
+    "storage_bucket": "sellmate-bdd22.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1002770348452:android:f660674c1aa058367a6931",
+        "android_client_info": {
+          "package_name": "com.example.sellmatekioskapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCC6ZvTaIGy06Lyaqn_HG6mi9SknK7iWcE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
