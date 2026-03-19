@@ -1,11 +1,8 @@
-@file:OptIn(kotlinx.serialization.InternalSerializationApi::class)
-// Models.kt
 package com.example.sellmatekioskapp
 
+import com.google.gson.annotations.SerializedName
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-
-// ---- Pi Vend Sequence (optional / dev mode) ----
 
 @Serializable
 data class PiVendStep(
@@ -23,7 +20,6 @@ data class PiVendSequenceRequest(
 
 @Serializable
 data class PiVendStepEcho(
-    // Pi returns mask as hex string like "0x80"
     val mask: String,
     val pulses: Int,
     @SerialName("pulse_seconds") val pulseSeconds: Double,
@@ -38,11 +34,9 @@ data class PiVendSequenceResponse(
     val steps: List<PiVendStepEcho>? = null
 )
 
-// ---- Server-based order flow (recommended) ----
-
 @Serializable
 data class CartLine(
-    val slotId: String,          // "S01"
+    val slotId: String,
     val name: String,
     val priceCents: Int,
     val quantityAvailable: Int,
@@ -51,35 +45,33 @@ data class CartLine(
     val qty: Int
 )
 
-@Serializable
 data class VendSequenceItem(
-    @SerialName("slot_id") val slotId: String,
+    @SerializedName("slot_id") val slotId: String,
     val qty: Int
 )
 
-@Serializable
 data class CreateOrderRequest(
-    @SerialName("machine_id") val machineId: String,
+    @SerializedName("machine_id") val machineId: String,
     val items: List<VendSequenceItem>,
-    @SerialName("amount_cents") val amountCents: Int
+    @SerializedName("amount_cents") val amountCents: Int
 )
 
-@Serializable
 data class CreateOrderResponse(
-    @SerialName("order_id") val orderId: String,
-    val status: String
+    @SerializedName("order_id") val orderId: String,
+    val status: String,
+    @SerializedName("machine_id") val machineId: String? = null,
+    @SerializedName("amount_cents") val amountCents: Int? = null
 )
 
-@Serializable
 data class StartPaymentResponse(
+    @SerializedName("order_id") val orderId: String? = null,
     val status: String,
-    @SerialName("payment_intent_id") val paymentIntentId: String? = null
+    @SerializedName("payment_intent_id") val paymentIntentId: String? = null
 )
 
-@Serializable
 data class OrderStatusResponse(
-    @SerialName("order_id") val orderId: String,
+    @SerializedName("order_id") val orderId: String,
     val status: String,
-    val message: String? = null
-    // TODO: add fields you return (vend_job_id, vend_results, etc.)
+    @SerializedName("payment_intent_id") val paymentIntentId: String? = null,
+    @SerializedName("amount_cents") val amountCents: Int? = null
 )

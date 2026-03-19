@@ -1,139 +1,236 @@
-// CheckoutScreen.kt
 package com.example.sellmatekioskapp
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CheckoutScreen(
     order: OrderDraft,
     checkout: CheckoutManager,
     onBack: () -> Unit,
-    onFinished: () -> Unit
+    onFinished: () -> Unit,
+    onReturnHome: () -> Unit
 ) {
+    var isStartingCheckout by remember { mutableStateOf(false) }
+    var errorText by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    val state by checkout.state.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
 
-    val linesBySlot by order.linesBySlot.collectAsState()
-    val lines by remember(linesBySlot) {
-        derivedStateOf { linesBySlot.values.sortedBy { it.name.lowercase() } }
-    }
+    val linesMap by order.linesBySlot.collectAsState()
+    val lineItems = linesMap.values.sortedBy { it.name.lowercase() }
+    val totalPriceCents = lineItems.sumOf { it.priceCents * it.qty }
 
-    val isBusy = state is CheckoutState.CreatingOrder ||
-            state is CheckoutState.StartingPayment ||
-            state is CheckoutState.AwaitingPayment ||
-            state is CheckoutState.Vending
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+    ) {
+        Text(
+            text = "Review Order",
+            style = MaterialTheme.typography.headlineSmall
+        )
 
-    // When state becomes Failure, show snackbar once.
-    LaunchedEffect(state) {
-        if (state is CheckoutState.Failure) {
-            val msg = (state as CheckoutState.Failure).message
-            snackbarHostState.showSnackbar(msg)
-        }
-    }
+        Spacer(modifier = Modifier.height(16.dp))
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Checkout") },
-                navigationIcon = {
-                    TextButton(onClick = onBack, enabled = !isBusy) { Text("Back") }
-                }
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar = {
-            Row(
-                Modifier.fillMaxWidth().padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "Total: ${formatUsd(order.totalCents())}",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Spacer(Modifier.weight(1f))
-                Button(
-                    onClick = {
-                        scope.launch {
-                            val result = checkout.startCheckout(
-                                amountCents = order.totalCents(),
-                                items = order.toVendItems()
-                            )
-
-                            result.onSuccess {
-                                order.clear()
-                                onFinished()
-                            }.onFailure { e ->
-                                // The state flow will already move to Failure, but snackbar gives immediate feedback.
-                                snackbarHostState.showSnackbar(e.message ?: "Checkout failed.")
-                            }
-                        }
-                    },
-                    enabled = lines.isNotEmpty() && !isBusy
-                ) {
-                    Text("Finish Purchase")
-                }
-            }
-        }
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-
-            when (val s = state) {
-                is CheckoutState.Idle -> StatusCard("Ready")
-                is CheckoutState.CreatingOrder -> StatusCard("Creating order…")
-                is CheckoutState.StartingPayment -> StatusCard("Starting payment…")
-                is CheckoutState.AwaitingPayment -> StatusCard("Awaiting payment on reader…")
-                is CheckoutState.Vending -> StatusCard("Vending…")
-                is CheckoutState.Success -> StatusCard("Success!")
-                is CheckoutState.Failure -> {
-                    StatusCard("Failed: ${s.message}")
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                        TextButton(onClick = { checkout.reset() }) { Text("Reset") }
+        if (lineItems.isEmpty()) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Your order is empty.",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(onClick = onReturnHome) {
+                        Text("Back to Inventory")
                     }
                 }
             }
+            return
+        }
 
-            LazyColumn(Modifier.fillMaxSize()) {
-                items(lines) { line ->
-                    ListItem(
-                        headlineContent = { Text(line.name) },
-                        supportingContent = { Text("Slot ${line.slotId}") },
-                        trailingContent = {
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text("${line.qty} × ${formatUsd(line.priceCents)}")
-                                Row {
-                                    TextButton(
-                                        onClick = { order.removeOne(line.slotId) },
-                                        enabled = !isBusy
-                                    ) { Text("−") }
+        LazyColumn(
+            modifier = Modifier.weight(1f, fill = true),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(lineItems) { item ->
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = item.name,
+                            style = MaterialTheme.typography.titleMedium
+                        )
 
-                                    TextButton(
-                                        onClick = { order.increment(line.slotId) },
-                                        enabled = !isBusy && line.qty < line.quantityAvailable
-                                    ) { Text("+") }
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Text("Slot: ${item.slotId}")
+                        Text("Price: ${formatPrice(item.priceCents)}")
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row {
+                                OutlinedButton(
+                                    onClick = { order.removeOne(item.slotId) },
+                                    enabled = !isStartingCheckout
+                                ) {
+                                    Text("-")
+                                }
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                Text(
+                                    text = "Qty: ${item.qty}",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.padding(vertical = 12.dp)
+                                )
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                OutlinedButton(
+                                    onClick = { order.increment(item.slotId) },
+                                    enabled = !isStartingCheckout && item.qty < item.quantityAvailable
+                                ) {
+                                    Text("+")
                                 }
                             }
+
+                            Text(
+                                text = formatPrice(item.priceCents * item.qty),
+                                style = MaterialTheme.typography.titleMedium
+                            )
                         }
-                    )
-                    Divider()
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Order Total",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = formatPrice(totalPriceCents),
+                    style = MaterialTheme.typography.headlineSmall
+                )
+            }
+        }
+
+        if (errorText != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = errorText ?: "",
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedButton(
+                onClick = onBack,
+                modifier = Modifier.weight(1f),
+                enabled = !isStartingCheckout
+            ) {
+                Text("Back")
+            }
+
+            Button(
+                onClick = {
+                    scope.launch {
+                        isStartingCheckout = true
+                        errorText = null
+
+                        val started = checkout.startCheckout(order)
+                        if (!started.isSuccess) {
+                            errorText = started.exceptionOrNull()?.message ?: "Unable to start checkout"
+                            isStartingCheckout = false
+                            return@launch
+                        }
+
+                        var attempts = 0
+                        while (attempts < 60) {
+                            delay(2000)
+
+                            val status = checkout.fetchCurrentOrderStatus()?.status?.uppercase()
+
+                            when (status) {
+                                "COMPLETED",
+                                "COMPLETE",
+                                "VEND_COMPLETED",
+                                "VEND_SUCCESS",
+                                "SUCCEEDED",
+                                "PAID" -> {
+                                    isStartingCheckout = false
+                                    onFinished()
+                                    return@launch
+                                }
+
+                                "CANCELLED",
+                                "FAILED",
+                                "PAYMENT_FAILED",
+                                "VEND_FAILED" -> {
+                                    errorText = "Checkout failed: $status"
+                                    isStartingCheckout = false
+                                    return@launch
+                                }
+                            }
+
+                            attempts++
+                        }
+
+                        errorText = "Payment started, but final status was not confirmed yet."
+                        isStartingCheckout = false
+                    }
+                },
+                modifier = Modifier.weight(1f),
+                enabled = !isStartingCheckout
+            ) {
+                if (isStartingCheckout) {
+                    CircularProgressIndicator()
+                } else {
+                    Text("Finish Purchase")
                 }
             }
         }
     }
 }
 
-@Composable
-private fun StatusCard(text: String) {
-    Card(Modifier.fillMaxWidth().padding(16.dp)) {
-        Text(text, Modifier.padding(16.dp))
-    }
+private fun formatPrice(priceCents: Int): String {
+    return "$" + "%,.2f".format(priceCents / 100.0)
 }
