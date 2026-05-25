@@ -39,6 +39,8 @@ fun CheckoutScreen(
 ) {
     var isStartingCheckout by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
+    var statusText by remember { mutableStateOf<String?>(null) }
+
     val scope = rememberCoroutineScope()
 
     val linesMap by order.linesBySlot.collectAsState()
@@ -148,6 +150,14 @@ fun CheckoutScreen(
             }
         }
 
+        if (statusText != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = statusText ?: "",
+                style = MaterialTheme.typography.bodyLarge
+            )
+        }
+
         if (errorText != null) {
             Spacer(modifier = Modifier.height(12.dp))
             Text(
@@ -175,46 +185,88 @@ fun CheckoutScreen(
                     scope.launch {
                         isStartingCheckout = true
                         errorText = null
+                        statusText = "Preparing checkout..."
 
                         val started = checkout.startCheckout(order)
                         if (!started.isSuccess) {
                             errorText = started.exceptionOrNull()?.message ?: "Unable to start checkout"
+                            statusText = null
                             isStartingCheckout = false
                             return@launch
                         }
 
+                        statusText = "Waiting for card..."
+
                         var attempts = 0
-                        while (attempts < 60) {
+                        while (attempts < 90) {
                             delay(2000)
 
                             val status = checkout.fetchCurrentOrderStatus()?.status?.uppercase()
 
                             when (status) {
+                                "CREATED" -> {
+                                    statusText = "Preparing checkout..."
+                                }
+
+                                "AUTHORIZING",
+                                "PAYMENT_STARTED" -> {
+                                    statusText = "Waiting for card..."
+                                }
+
+                                "AUTHORIZED" -> {
+                                    statusText = "Payment authorized. Preparing to vend..."
+                                }
+
+                                "VENDING" -> {
+                                    statusText = "Vending your item..."
+                                }
+
+                                "CAPTURING" -> {
+                                    statusText = "Vend confirmed. Completing purchase..."
+                                }
+
                                 "COMPLETED",
                                 "COMPLETE",
                                 "VEND_COMPLETED",
                                 "VEND_SUCCESS",
                                 "SUCCEEDED",
                                 "PAID" -> {
+                                    statusText = "Purchase complete."
                                     isStartingCheckout = false
                                     onFinished()
                                     return@launch
                                 }
 
-                                "CANCELLED",
+                                "CANCELLED" -> {
+                                    errorText = "Purchase cancelled."
+                                    statusText = null
+                                    isStartingCheckout = false
+                                    return@launch
+                                }
+
                                 "FAILED",
                                 "PAYMENT_FAILED",
                                 "VEND_FAILED" -> {
-                                    errorText = "Checkout failed: $status"
+                                    errorText = "Checkout failed. Your payment was not captured."
+                                    statusText = null
                                     isStartingCheckout = false
                                     return@launch
+                                }
+
+                                null -> {
+                                    statusText = "Checking order status..."
+                                }
+
+                                else -> {
+                                    statusText = "Processing order... Status: $status"
                                 }
                             }
 
                             attempts++
                         }
 
-                        errorText = "Payment started, but final status was not confirmed yet."
+                        errorText = "Payment/vend started, but final status was not confirmed. Please contact staff."
+                        statusText = null
                         isStartingCheckout = false
                     }
                 },
