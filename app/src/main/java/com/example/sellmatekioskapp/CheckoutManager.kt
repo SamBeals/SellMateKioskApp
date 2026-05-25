@@ -12,7 +12,6 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 
-
 class CheckoutManager(
     private val api: SellMateApi,
     private val machineId: String,
@@ -41,10 +40,6 @@ class CheckoutManager(
 
     suspend fun startCheckout(order: OrderDraft): Result<String> = withContext(Dispatchers.IO) {
         try {
-            Log.d("Checkout", "machineId=$machineId")
-            Log.d("Checkout", "items=${order.toVendItems()}")
-            Log.d("Checkout", "amount=${order.totalCents()}")
-
             val items = order.toVendItems()
 
             if (items.isEmpty()) {
@@ -63,11 +58,6 @@ class CheckoutManager(
                 )
             )
 
-            Log.d(
-                "CheckoutManager",
-                "createOrder success orderId=${createResponse.orderId} status=${createResponse.status}"
-            )
-
             setActiveOrder(
                 orderId = createResponse.orderId,
                 totalPriceCents = totalCents
@@ -76,11 +66,6 @@ class CheckoutManager(
             lastKnownStatus = createResponse.status
 
             val paymentResponse = api.startPayment(createResponse.orderId)
-
-            Log.d(
-                "CheckoutManager",
-                "startPayment success status=${paymentResponse.status} paymentIntentId=${paymentResponse.paymentIntentId}"
-            )
 
             lastKnownStatus = paymentResponse.status
 
@@ -129,11 +114,13 @@ class CheckoutManager(
             )
         } catch (e: HttpException) {
             val errorBody = e.response()?.errorBody()?.string().orEmpty()
+
             Log.e(
                 "CheckoutManager",
                 "fetchOrderStatus HTTP ${e.code()} body=$errorBody",
                 e
             )
+
             null
         } catch (e: Exception) {
             Log.e("CheckoutManager", "fetchOrderStatus failed", e)
@@ -163,19 +150,22 @@ class CheckoutManager(
             }
 
             val code = conn.responseCode
-            val body = try {
+
+            try {
                 val stream = if (code in 200..299) conn.inputStream else conn.errorStream
                 stream?.bufferedReader()?.use { it.readText() }.orEmpty()
             } finally {
                 conn.disconnect()
             }
 
-            Log.d("CheckoutManager", "cancelOrder code=$code body=$body")
-
             val success = code in 200..299
+
             if (success) {
                 lastKnownStatus = "CANCELLED"
+            } else {
+                Log.e("CheckoutManager", "cancelOrder failed HTTP $code")
             }
+
             success
         } catch (e: Exception) {
             Log.e("CheckoutManager", "cancelOrder failed", e)
