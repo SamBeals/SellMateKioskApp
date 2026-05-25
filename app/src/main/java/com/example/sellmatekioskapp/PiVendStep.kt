@@ -66,7 +66,8 @@ data class CreateOrderResponse(
 data class StartPaymentResponse(
     @SerializedName("order_id") val orderId: String? = null,
     val status: String,
-    @SerializedName("payment_intent_id") val paymentIntentId: String? = null
+    @SerializedName("payment_intent_id") val paymentIntentId: String? = null,
+    @SerializedName("checkout_session_id") val checkoutSessionId: String? = null
 )
 
 data class OrderStatusResponse(
